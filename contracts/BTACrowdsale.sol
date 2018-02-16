@@ -291,11 +291,9 @@ contract MintableToken is StandardToken, Ownable {
             owner.transfer(this.balance);
             return;
         }
-
         MintableToken token = MintableToken(_token);
         uint256 balance = token.balanceOf(this);
         token.transfer(owner, balance);
-
         Transfer(_token, owner, balance);
     }
 }
@@ -333,6 +331,14 @@ contract BTACrowdsale is Ownable, Crowdsale, MintableToken {
 
     enum State {Active, Closed}
     State public state;
+
+    /**
+    * 1 Stage  1 ETH = 300  token -- Limit = 0,10  ETH
+    * 2 Stage  1 ETH = 290  token -- Limit = 0,05  ETH
+    * 3 Stage  1 ETH = 275  token -- Limit = 0,01  ETH
+    * 4 Stage  1 ETH = 250  token -- Limit = no
+    *
+    */
     uint256[] public rates  = [300, 290, 275, 250];
     uint256[] public weiMinSale =  [10*10**16,  5*10**16, 1*10**16, 0];
 
@@ -343,11 +349,9 @@ contract BTACrowdsale is Ownable, Crowdsale, MintableToken {
     uint256 public fundForTeam =  450 * (10 ** 6) * (10 ** uint256(decimals));
 
     uint256 public countInvestor;
-    bool public saleToken = true;
 
     event TokenPurchase(address indexed beneficiary, uint256 value, uint256 amount);
     event TokenLimitReached(uint256 tokenRaised, uint256 purchasedToken);
-    event HardCapReached();
     event Finalized();
 
     function BTACrowdsale(
@@ -379,18 +383,9 @@ contract BTACrowdsale is Ownable, Crowdsale, MintableToken {
         buyTokens(msg.sender);
     }
 
-    function startSale() public onlyOwner {
-        saleToken = true;
-    }
-
-    function stopSale() public onlyOwner {
-        saleToken = false;
-    }
-
     // low level token purchase function
     function buyTokens(address _investor) public inState(State.Active) payable returns (uint256){
         require(_investor != address(0));
-        require(saleToken == true);
         uint256 weiAmount = msg.value;
         uint256 tokens = validPurchaseTokens(weiAmount);
         if (tokens == 0) {revert();}
@@ -407,45 +402,39 @@ contract BTACrowdsale is Ownable, Crowdsale, MintableToken {
         return tokens;
     }
 
-    /**
-    * 1 Stage  27 feb 2018 end 21 March 2018 (23 days)      1 ETH = 300  token -- Limit = 0,10  ETH
-    * 2 Stage  21 March 2018 end 24 April 2018 (35 days)    1 ETH = 290  token -- Limit = 0,05  ETH
-    * 3 Stage  24 April 2018 end 7 June (45 days)           1 ETH = 275  token -- Limit = 0,01  ETH
-    * 4 Stage  7 June 2018 end 29 July (53 days)            1 ETH = 250  token -- Limit = no
-    *
-    */
     function getTotalAmountOfTokens(uint256 _weiAmount) internal view returns (uint256) {
-        uint256 currentPeriod = getPeriod(tokenAllocated);
+        uint256 currentDate = now;
+        //currentDate = 1520640000; //for test's
+        uint256 currentPeriod = getPeriod(currentDate);
         uint256 amountOfTokens = 0;
-        if(currentPeriod < 12){
-            amountOfTokens = _weiAmount.mul(rates[currentPeriod]);
-        } else {
-            amountOfTokens = 0;
-        }
-        if(tokenAllocated.add(amountOfTokens) > fundForSale){
-            amountOfTokens = 0;
+        if(currentPeriod < 4){
+            if(_weiAmount < weiMinSale[currentPeriod]){
+                return 0;
+            }
+            amountOfTokens = (_weiAmount.mul(rates[currentPeriod])).div(uint256(10**8));
         }
         return amountOfTokens;
     }
 
-    function getPeriod(uint256 currentTokenAllocated) public view returns (uint) {
-        uint256 currentDate = now;
+    function getPeriod(uint256 _currentDate) public pure returns (uint) {
         //1519689600 - Feb, 27, 2018 00:00:00 && 1521676799 - Mar, 21, 2018 23:59:59
-        //1521676800 - Mar, 22, 2018 00:00:00 && 1521676799 - Apr, 24, 2018 23:59:59
-        //1524614400 - Apr, 25, 2018 00:00:00 && 1521676799 - Jun, 07, 2018 23:59:59
-        //1528416000 - Jun, 08, 2018 00:00:00 && 1521676799 - Jul, 29, 2018 23:59:59
+        //1521676800 - Mar, 22, 2018 00:00:00 && 1524614399 - Apr, 24, 2018 23:59:59
+        //1524614400 - Apr, 25, 2018 00:00:00 && 1528415999 - Jun, 07, 2018 23:59:59
+        //1528416000 - Jun, 08, 2018 00:00:00 && 1532908799 - Jul, 29, 2018 23:59:59
 
-        if( < currentDate){
-            return 12;
-        }
-        for(uint i = 11; i > 0; i--){
-            if(currentTokenAllocated >= limits[i-1]){
-                return i;
-            }
-        }
-        if(currentTokenAllocated < limits[0]){
+        if( 1519689600 <= _currentDate && _currentDate <= 1521676799){
             return 0;
         }
+        if( 1521676800 <= _currentDate && _currentDate <= 1524614399){
+            return 1;
+        }
+        if( 1524614400 <= _currentDate && _currentDate <= 1528415999){
+            return 2;
+        }
+        if( 1528416000 <= _currentDate && _currentDate <= 1532908799){
+            return 3;
+        }
+        return 10;
     }
 
     function deposit(address investor) internal {
@@ -470,7 +459,7 @@ contract BTACrowdsale is Ownable, Crowdsale, MintableToken {
             TokenLimitReached(tokenAllocated, addTokens);
             return 0;
         }
-    return addTokens;
+        return addTokens;
     }
 
     function finalize() public onlyOwner inState(State.Active) returns (bool result) {
