@@ -245,7 +245,7 @@ contract Ownable {
 
 contract MintableToken is StandardToken, Ownable {
     string public constant name = "Bitcoin Futures Alpha";
-    string public constant symbol = "BTA";
+    string public constant symbol = "BFA";
     uint8 public constant decimals = 10;
 
     event Mint(address indexed to, uint256 amount);
